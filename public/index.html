@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1e40af">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="HaulBook">
+<title>HaulBook</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+:root{
+  --p:#1e40af;--pd:#1e3a8a;--pl:#dbeafe;--p2:#3b82f6;
+  --g:#16a34a;--r:#dc2626;--y:#d97706;--o:#ea580c;
+  --bg:#f1f5f9;--card:#fff;--border:#e2e8f0;
+  --text:#1e293b;--muted:#64748b;--light:#f8fafc;
+  --nav-h:60px;--safe-b:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;background:var(--bg);overflow:hidden}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:var(--text)}
+input,select,button,textarea{font-family:inherit;font-size:16px}
+
+/* AUTH */
+.auth-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;background:linear-gradient(135deg,#1e3a8a 0%,#1e40af 50%,#2563eb 100%)}
+.auth-box{background:#fff;border-radius:20px;padding:32px 28px;width:100%;max-width:400px;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+.auth-logo{text-align:center;margin-bottom:24px}
+.auth-logo .truck-ico{font-size:48px;display:block;margin-bottom:8px}
+.auth-logo h1{font-size:24px;font-weight:800;color:var(--p)}
+.auth-logo p{color:var(--muted);font-size:14px;margin-top:4px}
+.auth-box h2{font-size:18px;font-weight:700;margin-bottom:6px}
+.auth-box .sub{color:var(--muted);font-size:14px;margin-bottom:20px}
+.err-msg{background:#fef2f2;color:var(--r);border-radius:8px;padding:10px 14px;font-size:14px;margin-bottom:14px}
+.field{margin-bottom:14px}
+.field label{display:block;font-size:13px;font-weight:600;color:var(--muted);margin-bottom:5px}
+.field input,.field select{width:100%;border:1.5px solid var(--border);border-radius:10px;padding:11px 14px;outline:none;transition:border .2s;background:#fff}
+.field input:focus,.field select:focus{border-color:var(--p)}
+.role-pick{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+.role-btn{border:2px solid var(--border);background:#fff;border-radius:12px;padding:14px;cursor:pointer;text-align:center;transition:all .2s}
+.role-btn.active{border-color:var(--p);background:var(--pl)}
+.role-btn .ico{font-size:28px;display:block;margin-bottom:4px}
+.role-btn .lbl{font-size:13px;font-weight:600;color:var(--text)}
+.role-btn .desc{font-size:11px;color:var(--muted);margin-top:2px}
+.auth-switch{text-align:center;font-size:14px;color:var(--muted);margin-top:16px}
+.auth-switch span{color:var(--p);cursor:pointer;font-weight:600}
+
+/* LAYOUT */
+.app{display:flex;flex-direction:column;height:100vh;overflow:hidden}
+.topbar{height:var(--nav-h);background:#fff;border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 16px;gap:12px;flex-shrink:0;padding-top:env(safe-area-inset-top)}
+.topbar-title{font-size:18px;font-weight:800;flex:1;color:var(--p)}
+.topbar-badge{font-size:11px;font-weight:700;background:var(--pl);color:var(--p);padding:3px 8px;border-radius:20px}
+.content{flex:1;overflow-y:auto;padding:16px;padding-bottom:calc(var(--nav-h) + var(--safe-b) + 16px)}
+.bottom-nav{position:fixed;bottom:0;left:0;right:0;height:calc(var(--nav-h) + var(--safe-b));background:#fff;border-top:1px solid var(--border);display:flex;padding-bottom:var(--safe-b)}
+.nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;border:none;background:none;cursor:pointer;color:var(--muted);padding:8px 4px;transition:color .2s}
+.nav-btn.active{color:var(--p)}
+.nav-btn .nav-ico{font-size:22px;line-height:1}
+.nav-btn .nav-lbl{font-size:10px;font-weight:600}
+
+/* CARDS */
+.card{background:var(--card);border-radius:14px;border:1px solid var(--border);margin-bottom:14px;overflow:hidden}
+.card-body{padding:16px}
+.card-title{font-size:15px;font-weight:700;margin-bottom:14px;color:var(--text)}
+.kpi-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.kpi-grid.three{grid-template-columns:1fr 1fr 1fr}
+.kpi{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 12px;text-align:center}
+.kpi-lbl{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+.kpi-val{font-size:20px;font-weight:800;color:var(--text)}
+.kpi-val.g{color:var(--g)}
+.kpi-val.b{color:var(--p)}
+.kpi-val.r{color:var(--r)}
+.kpi-val.o{color:var(--o)}
+
+/* LIST ITEMS */
+.list-item{display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid var(--border)}
+.list-item:last-child{border-bottom:none;padding-bottom:0}
+.li-icon{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+.li-main{flex:1;min-width:0}
+.li-title{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.li-sub{font-size:12px;color:var(--muted);margin-top:2px}
+.li-amount{font-size:15px;font-weight:700;white-space:nowrap}
+.li-amount.g{color:var(--g)}
+.li-amount.r{color:var(--r)}
+.li-amount.b{color:var(--p)}
+
+/* FORMS */
+.form-row{display:flex;gap:10px;margin-bottom:12px}
+.form-row.full{flex-direction:column}
+.fg{flex:1;display:flex;flex-direction:column;gap:4px}
+.fg label{font-size:12px;font-weight:600;color:var(--muted)}
+.fg input,.fg select,.fg textarea{border:1.5px solid var(--border);border-radius:8px;padding:9px 11px;outline:none;background:#fff;transition:border .2s}
+.fg input:focus,.fg select:focus,.fg textarea:focus{border-color:var(--p)}
+.fg textarea{resize:vertical;min-height:64px;font-size:14px}
+
+/* BUTTONS */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:none;border-radius:10px;padding:11px 18px;font-size:14px;font-weight:600;cursor:pointer;transition:opacity .2s;width:100%;margin-top:4px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-primary{background:var(--p);color:#fff}
+.btn-primary:hover{background:var(--pd)}
+.btn-green{background:var(--g);color:#fff}
+.btn-danger{background:#fef2f2;color:var(--r);width:auto;padding:7px 12px;margin:0;font-size:13px}
+.btn-sm{padding:6px 10px;font-size:12px;width:auto;margin:0}
+.btn-outline{background:#fff;color:var(--p);border:1.5px solid var(--p)}
+.btn-scan{background:var(--pl);color:var(--pd);padding:7px 14px;font-size:13px;width:auto;margin:0;border-radius:8px}
+
+/* BADGES */
+.badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600}
+.badge-blue{background:var(--pl);color:var(--p)}
+.badge-green{background:#dcfce7;color:var(--g)}
+.badge-red{background:#fef2f2;color:var(--r)}
+.badge-yellow{background:#fef3c7;color:var(--y)}
+.badge-orange{background:#fff7ed;color:var(--o)}
+
+/* SECTION HEADER */
+.section-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.section-hdr h3{font-size:15px;font-weight:700}
+
+/* RECEIPT PREVIEW */
+.receipt-preview{display:none;margin-bottom:12px;border-radius:10px;overflow:hidden;border:2px solid var(--p);position:relative}
+.receipt-preview img{width:100%;max-height:160px;object-fit:cover;display:block}
+.receipt-scanning{display:none;position:absolute;inset:0;background:rgba(30,64,175,.85);color:#fff;align-items:center;justify-content:center;font-size:14px;font-weight:600;gap:8px}
+
+/* EMPTY */
+.empty{text-align:center;padding:40px 20px;color:var(--muted)}
+.empty-ico{font-size:40px;margin-bottom:10px}
+
+/* TOAST */
+.toast{position:fixed;bottom:calc(var(--nav-h) + var(--safe-b) + 12px);left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;padding:10px 20px;border-radius:30px;font-size:14px;font-weight:600;z-index:999;opacity:0;transition:opacity .3s;white-space:nowrap;pointer-events:none}
+.toast.show{opacity:1}
+
+/* MODAL */
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100;align-items:flex-end}
+.modal-bg.open{display:flex}
+.modal{background:#fff;border-radius:20px 20px 0 0;padding:24px 20px 32px;width:100%;max-height:90vh;overflow-y:auto}
+.modal-title{font-size:17px;font-weight:800;margin-bottom:18px}
+
+/* CHART */
+.chart-wrap{position:relative;height:180px;margin-top:8px}
+
+@keyframes spin{to{transform:rotate(360deg)}}
+.spin{animation:spin 1s linear infinite;display:inline-block}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<div class="toast" id="toast"></div>
+<input type="file" id="receipt-input" accept="image/*" capture="environment" style="display:none" onchange="onReceiptFile(this)">
+
+<script>
+'use strict';
+// ─── State ───────────────────────────────────────────
+let token = localStorage.getItem('hb_token');
+let user  = null;
+let tab   = 'dashboard';
+let authMode = 'login';
+let selectedRole = 'driver';
+
+let summary  = null;
+let loads    = [];
+let expenses = [];
+let fuel     = [];
+let trucks   = [];
+let drivers  = [];
+let settlements = [];
+let ifta     = null;
+
+// ─── Helpers ─────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const v = id => ($( id)?.value || '').trim();
+function today() { return new Date().toISOString().slice(0,10); }
+function $n(n)   { return '$' + (n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function $mi(n)  { return (n||0).toLocaleString('en-US',{minimumFractionDigits:1,maximumFractionDigits:1}) + ' mi'; }
+function fd(d)   { if(!d) return '—'; try { return new Date(d+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}); } catch { return d; } }
+function statusBadge(s) {
+  const map = { delivered:'badge-green', pending:'badge-yellow', cancelled:'badge-red', draft:'badge-yellow', paid:'badge-green', void:'badge-red' };
+  return `<span class="badge ${map[s]||'badge-blue'}">${s}</span>`;
+}
+
+let toastTimer;
+function toast(msg, ico='ℹ️') {
+  const el = $('toast');
+  el.textContent = ico + ' ' + msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+function setBtnLoading(id, on) {
+  const el = $(id); if (!el) return;
+  if (on) { el.dataset.label = el.dataset.label||el.textContent; el.textContent = 'Saving…'; el.disabled = true; }
+  else { el.textContent = el.dataset.label||el.textContent; el.disabled = false; }
+}
+
+async function api(method, path, body) {
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (token) opts.headers['Authorization'] = 'Bearer ' + token;
+  if (body)  opts.body = JSON.stringify(body);
+  try {
+    const r = await fetch('/api' + path, opts);
+    return await r.json();
+  } catch { return { error: 'Network error' }; }
+}
+
+// ─── Auth ─────────────────────────────────────────────
+async function reload() {
+  [summary, loads, expenses, fuel] = await Promise.all([
+    api('GET','/summary'),
+    api('GET','/loads'),
+    api('GET','/expenses'),
+    api('GET','/fuel'),
+  ]);
+  if (user?.role === 'owner') {
+    [trucks, drivers, settlements] = await Promise.all([
+      api('GET','/trucks'),
+      api('GET','/drivers'),
+      api('GET','/settlements'),
+    ]);
+  }
+}
+
+async function doLogin() {
+  const email = v('li-email'), pass = v('li-pass');
+  if (!email || !pass) return toast('Fill in all fields','⚠️');
+  $('auth-err').style.display='none';
+  const r = await api('POST','/auth/login',{email,password:pass});
+  if (r?.token) { token = r.token; user = { name: r.name, role: r.role }; localStorage.setItem('hb_token', token); await boot(); }
+  else { $('auth-err').textContent = r?.error||'Login failed'; $('auth-err').style.display='block'; }
+}
+
+async function doSignup() {
+  const name = v('su-name'), email = v('su-email'), pass = v('su-pass');
+  if (!name || !email || !pass) return toast('Fill in all fields','⚠️');
+  if (pass.length < 8) return toast('Password must be 8+ characters','⚠️');
+  $('auth-err').style.display='none';
+  const r = await api('POST','/auth/signup',{name,email,password:pass,role:selectedRole});
+  if (r?.token) { token = r.token; user = { name: r.name, role: r.role }; localStorage.setItem('hb_token', token); await boot(); }
+  else { $('auth-err').textContent = r?.error||'Signup failed'; $('auth-err').style.display='block'; }
+}
+
+function doLogout() { token = null; user = null; localStorage.removeItem('hb_token'); summary=null; loads=[]; expenses=[]; fuel=[]; render(); }
+
+async function boot() {
+  const me = await api('GET','/auth/me');
+  if (!me || me.error) { doLogout(); return; }
+  user = me;
+  await reload();
+  tab = 'dashboard';
+  render();
+}
+
+// ─── Render ───────────────────────────────────────────
+function render() {
+  const root = $('root');
+  if (!token || !user) { root.innerHTML = renderAuth(); return; }
+  root.innerHTML = `
+    <div class="app">
+      <div class="topbar">
+        <span class="topbar-title">🚛 HaulBook</span>
+        <span class="topbar-badge">${user.role === 'owner' ? '👔 Owner' : '🚚 Driver'}</span>
+        <button class="btn btn-danger btn-sm" onclick="doLogout()" style="margin:0;width:auto">Sign out</button>
+      </div>
+      <div class="content" id="page-content">${renderPage()}</div>
+      <nav class="bottom-nav">${renderNav()}</nav>
+    </div>`;
+}
+
+function renderNav() {
+  const isOwner = user?.role === 'owner';
+  const tabs = isOwner
+    ? [['dashboard','📊','Summary'],['loads','📦','Loads'],['fleet','🚛','Fleet'],['settlements','💵','Pay'],['more','⋯','More']]
+    : [['dashboard','📊','Summary'],['loads','📦','Loads'],['expenses','💸','Expenses'],['fuel','⛽','Fuel'],['more','⋯','More']];
+  return tabs.map(([id,ico,lbl])=>
+    `<button class="nav-btn ${tab===id?'active':''}" onclick="setTab('${id}')">
+      <span class="nav-ico">${ico}</span><span class="nav-lbl">${lbl}</span>
+    </button>`).join('');
+}
+
+function setTab(t) { tab = t; $('page-content').innerHTML = renderPage(); $('root').querySelector('.bottom-nav').innerHTML = renderNav(); window.scrollTo(0,0); }
+
+function renderPage() {
+  switch(tab) {
+    case 'dashboard':   return pgDashboard();
+    case 'loads':       return pgLoads();
+    case 'expenses':    return pgExpenses();
+    case 'fuel':        return pgFuel();
+    case 'fleet':       return pgFleet();
+    case 'settlements': return pgSettlements();
+    case 'ifta':        return pgIFTA();
+    case 'drivers':     return pgDrivers();
+    case 'more':        return pgMore();
+    default:            return pgDashboard();
+  }
+}
+
+// ─── AUTH SCREEN ──────────────────────────────────────
+function renderAuth() {
+  const isLogin = authMode === 'login';
+  return `<div class="auth-wrap">
+    <div class="auth-box">
+      <div class="auth-logo">
+        <span class="truck-ico">🚛</span>
+        <h1>HaulBook</h1>
+        <p>Built for truckers, by truckers</p>
+      </div>
+      <h2>${isLogin ? 'Welcome back' : 'Create account'}</h2>
+      <p class="sub">${isLogin ? 'Sign in to your account' : 'Start tracking your hauls'}</p>
+      <div id="auth-err" class="err-msg" style="display:none"></div>
+      ${!isLogin ? `
+        <div style="margin-bottom:16px">
+          <div class="fg" style="margin-bottom:8px"><label>I am a…</label></div>
+          <div class="role-pick">
+            <div class="role-btn ${selectedRole==='driver'?'active':''}" onclick="selectedRole='driver';render()">
+              <span class="ico">🚚</span><span class="lbl">Driver</span><span class="desc">Track my loads & expenses</span>
+            </div>
+            <div class="role-btn ${selectedRole==='owner'?'active':''}" onclick="selectedRole='owner';render()">
+              <span class="ico">👔</span><span class="lbl">Owner</span><span class="desc">Manage fleet & drivers</span>
+            </div>
+          </div>
+        </div>
+        <div class="field"><label>Full Name</label><input id="su-name" placeholder="Alex Smith" autocomplete="name"></div>
+      ` : ''}
+      <div class="field"><label>Email</label><input id="${isLogin?'li':'su'}-email" type="email" placeholder="you@example.com" autocomplete="email" inputmode="email"></div>
+      <div class="field"><label>Password</label><input id="${isLogin?'li':'su'}-pass" type="password" placeholder="••••••••" autocomplete="${isLogin?'current':'new'}-password"></div>
+      <button class="btn btn-primary" onclick="${isLogin?'doLogin()':'doSignup()'}">
+        ${isLogin ? 'Sign in' : 'Create account'}
+      </button>
+      <div class="auth-switch">
+        ${isLogin ? "No account? <span onclick=\"authMode='signup';render()\">Sign up free</span>"
+                  : "Have an account? <span onclick=\"authMode='login';render()\">Sign in</span>"}
+      </div>
+    </div>
+  </div>`;
+}
+
+// ─── DASHBOARD ────────────────────────────────────────
+function pgDashboard() {
+  const s = summary || {};
+  const isOwner = user?.role === 'owner';
+  const monthly = s.monthly || [];
+  const labels  = monthly.map(m => m.mo?.slice(5) || '');
+  const grossArr = monthly.map(m => parseFloat(m.gross)||0);
+
+  const chartId = 'dash-chart';
+  setTimeout(() => {
+    const canvas = $(chartId);
+    if (!canvas) return;
+    new Chart(canvas, {
+      type: 'bar',
+      data: { labels, datasets: [{ label: 'Gross', data: grossArr, backgroundColor: '#3b82f6', borderRadius: 6 }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+        scales: { y: { ticks: { callback: v => '$' + (v/1000).toFixed(0) + 'k' }, grid: { color: '#f1f5f9' } }, x: { grid: { display: false } } } }
+    });
+  }, 50);
+
+  return `
+  <div style="margin-bottom:14px">
+    <div style="font-size:20px;font-weight:800">Hi, ${user?.name?.split(' ')[0]} 👋</div>
+    <div style="color:var(--muted);font-size:14px">Here's your business at a glance</div>
+  </div>
+  <div class="kpi-grid">
+    <div class="kpi"><div class="kpi-lbl">Gross Revenue</div><div class="kpi-val b">${$n(s.grossIncome)}</div></div>
+    <div class="kpi"><div class="kpi-lbl">Net Profit</div><div class="kpi-val ${(s.netProfit||0)>=0?'g':'r'}">${$n(s.netProfit)}</div></div>
+    <div class="kpi"><div class="kpi-lbl">Total Miles</div><div class="kpi-val">${$mi(s.totalMiles)}</div></div>
+    <div class="kpi"><div class="kpi-lbl">Loads</div><div class="kpi-val">${s.loadCount||0}</div></div>
+  </div>
+  ${isOwner && s.owner ? `
+  <div class="kpi-grid">
+    <div class="kpi"><div class="kpi-lbl">Drivers</div><div class="kpi-val b">${s.owner.driver_count}</div></div>
+    <div class="kpi"><div class="kpi-lbl">Trucks</div><div class="kpi-val b">${s.owner.truck_count}</div></div>
+  </div>` : ''}
+  <div class="card">
+    <div class="card-body">
+      <div class="card-title">Revenue (12 months)</div>
+      <div class="chart-wrap"><canvas id="${chartId}"></canvas></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-body">
+      <div class="card-title">Tax Estimate</div>
+      <div class="kpi-grid three">
+        <div class="kpi"><div class="kpi-lbl">Self-Emp</div><div class="kpi-val r" style="font-size:15px">${$n(s.seTax)}</div></div>
+        <div class="kpi"><div class="kpi-lbl">Federal</div><div class="kpi-val r" style="font-size:15px">${$n(s.fedTax)}</div></div>
+        <div class="kpi"><div class="kpi-lbl">Quarterly</div><div class="kpi-val o" style="font-size:15px">${$n(s.quarterly)}</div></div>
+      </div>
+    </div>
+  </div>`;
+}
+
+// ─── LOADS ────────────────────────────────────────────
+const LOAD_STATUSES = ['delivered','in_transit','pending','cancelled'];
+
+function pgLoads() {
+  const isOwner = user?.role === 'owner';
+  const totalGross = loads.reduce((a,l) => a + (parseFloat(l.gross)||0), 0);
+  const totalMiles = loads.reduce((a,l) => a + (parseFloat(l.miles)||0), 0);
+  return `
+  <div class="kpi-grid">
+    <div class="kpi"><div class="kpi-lbl">Total Gross</div><div class="kpi-val b">${$n(totalGross)}</div></div>
+    <div class="kpi"><div class="kpi-lbl">Total Miles</div><div class="kpi-val">${$mi(totalMiles)}</div></div>
+  </div>
+  <div class="card">
+    <div class="card-body">
+      <div class="card-title">Log a Load</div>
+      <div class="form-row">
+        <div class="fg"><label>Date</label><input id="l-date" type="date" value="${today()}"></div>
+        <div class="fg"><label>Status</label><select id="l-status">${LOAD_STATUSES.map(s=>`<option>${s}</option>`).join('')}</select></div>
+      </div>
+      <div class="form-row">
+        <div class="fg"><label>Origin</label><input id="l-origin" placeholder="Chicago, IL"></div>
+        <div class="fg"><label>Destination</label><input id="l-dest" placeholder="Dallas, TX"></div>
+      </div>
+      <div class="form-row">
+        <div class="fg"><label>Miles</label><input id="l-miles" type="number" inputmode="decimal" placeholder="0" oninput="calcLoadGross()"></div>
+        <div class="fg"><label>Rate/Mile ($)</label><input id="l-rate" type="number" inputmode="decimal" placeholder="0.00" oninput="calcLoadGross()"></div>
+      </div>
+      <div class="form-row">
+        <div class="fg"><label>Gross Pay ($)</label><input id="l-gross" type="number" inputmode="decimal" placeholder="0.00"></div>
+        ${isOwner ? `<div class="fg"><label>Truck #</label><select id="l-truck"><option value="">— select —</option>${trucks.map(t=>`<option value="${t.id}">${t.unit_number}</option>`).join('')}</select></div>` : ''}
+      </div>
+      <div class="fg" style="margin-bottom:12px"><label>Notes</label><textarea id="l-notes" placeholder="Optional…"></textarea></div>
+      <button id="l-add" class="btn btn-primary" data-label="+ Add Load" onclick="addLoad()">+ Add Load</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-body">
+      <div class="card-title">Load History</div>
+      ${loads.length===0 ? `<div class="empty"><div class="empty-ico">📦</div><p>No loads yet</p></div>` :
+        loads.map(l => `
+        <div class="list-item">
+          <div class="li-icon" style="background:var(--pl)">📦</div>
+          <div class="li-main">
+            <div class="li-title">${l.origin||'?'} → ${l.destination||'?'} ${statusBadge(l.status)}</div>
+            <div class="li-sub">${fd(l.date)} · ${$mi(l.miles)}${l.driver_name ? ' · '+l.driver_name : ''}</div>
+          </div>
+          <div class="li-amount g">${$n(l.gross)}</div>
+          <button class="btn btn-danger btn-sm" onclick="delLoad('${l.id}')">✕</button>
+        </div>`).join('')}
+    </div>
+  </div>`;
+}
+
+function calcLoadGross() {
+  const mi = parseFloat(v('l-miles'))||0, rate = parseFloat(v('l-rate'))||0;
+  const el = $('l-gross'); if(el && mi && rate && !el.dataset.manual) el.value = (mi*rate).toFixed(2);
+}
+
+async function addLoad() {
+  const date = v('l-date'), origin = v('l-origin'), dest = v('l-dest');
+  const miles = parseFloat(v('l-miles'))||0, rate = parseFloat(v('l-rate'))||0;
+  const gross = parseFloat(v('l-gross'))||0;
+  const status = v('l-status')||'delivered';
+  const notes  = v('l-notes')||'';
+  const truck_id = $('l-truck')?.value || '';
+  if (!date) return toast('Date required','⚠️');
+  if (gross <= 0 && miles <= 0) return toast('Enter miles or gross pay','⚠️');
+  setBtnLoading('l-add', true);
+  const r = await api('POST','/loads',{date,origin,destination:dest,miles,rate_per_mile:rate,gross:gross||(miles*rate),status,notes,truck_id});
+  if (r?.ok) { toast('Load added!','✅'); await reload(); setTab('loads'); }
+  else { toast(r?.error||'Error','❌'); setBtnLoading('l-add',false); }
+}
+
+async function delLoad(id) {
+  if (!confirm('Delete this load?')) return;
+  await api('DELETE',`/loads/${id}`);
+  toast('Deleted','🗑️'); await reload(); setTab('loads');
+}
+
+// ─── EXPENSES ─────────────────────────────────────────
+const EXP_CATS = ['Fuel','Maintenance','Tires','Insurance','Permits & Licenses','Tolls & Scales','Meals','Lodging','Phone & Data','Equipment','Lumper Fees','Parking','Other'];
+
+function pgExpenses() {
+  const total = expenses.reduce((a,e) => a + (parseFloat(e.amount)||0)*(parseFloat(e.business_pct)||100)/100, 0);
+  return `
+  <div class="kpi-grid">
+    <div class="kpi"><div class="kpi-lbl">Total Deductible</div><div class="kpi-val r">${$n(total)}</div></div>
+    <div class="kpi"><div class="kpi-lbl">Entries</div><div class="kpi-val">${expenses.length}</div></div>
+  </div>
+  <div class="card">
+    <div class="card-body">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div class="card-title" style="margin:0">Add Expense</div>
+        <button class="btn btn-scan" onclick="openReceipt('expense')">📷 Scan</button>
+      </div>
+      <div id="receipt-prev-exp" class="receipt-preview">
+        <img id="receipt-img-exp">
+        <div id="receipt-scan-exp" class="receipt-scanning"><span class="spin">⏳</span> Reading…</div>
+      </div>
+      <div class="form-row">
+        <div class="fg"><label>Date</label><input id="e-date" type="date" value="${today()}"></div>
+        <div class="fg"><label>Category</label><select id="e-cat">${EXP_CATS.map(c=>`<option>${c}</option>`).join('')}</select></div>
+      </div>
+      <div class="form-row full"><div class="fg"><label>Description</label><input id="e-desc" placeholder="e.g. Pilot Flying J – I-80"></div></div>
+      <div class="form-row">
+        <div class="fg"><label>Amount ($)</label><input id="e-amt" type="number" inputmode="decimal" placeholder="0.00" oninput="calcDed()"></div>
+        <div class="fg"><label>Business %</label><input id="e-pct" type="number" inputmode="numeric" value="100" oninput="calcDed()"></div>
+      </div>
+      <div class="form-row"><div class="fg"><label>Deductible</label><input id="e-ded" readonly style="font-weight:800;color:var(--r)"></div></div>
+      <button id="e-add" class="btn btn-primary" data-label="+ Add Expense" onclick="addExpense()">+ Add Expense</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-body">
+      <div class="card-title">Expense History</div>
+      ${expenses.length===0 ? `<div class="empty"><div class="empty-ico">💸</div><p>No expenses yet</p></div>` :
+        expenses.map(e => `
+        <div class="list-item">
+          <div class="li-icon" style="background:#fef2f2">💸</div>
+          <div class="li-main">
+            <div class="li-title">${e.category} <span class="badge badge-blue">${fd(e.date)}</span></div>
+            <div class="li-sub">${e.description||'—'} · ${e.business_pct}% biz</div>
+          </div>
+          <div class="li-amount r">${$n(e.amount*e.business_pct/100)}</div>
+          <button class="btn btn-danger btn-sm" onclick="delExpense('${e.id}')">✕</button>
+        </div>`).join('')}
+    </div>
+  </div>`;
+}
+
+function calcDed() {
+  const a=+(v('e-amt'))||0, p=+(v('e-pct'))||100;
+  const el=$('e-ded'); if(el) el.value=$n(a*p/100);
+}
+
+async function addExpense() {
+  const date=v('e-date'),cat=v('e-cat'),desc=v('e-desc'),amt=+(v('e-amt'))||0,pct=+(v('e-pct'))||100;
+  if(!date||amt<=0){toast('Date and amount required','⚠️');return;}
+  setBtnLoading('e-add',true);
+  const r=await api('POST','/expenses',{date,category:cat,description:desc,amount:amt,business_pct:pct});
+  if(r?.ok){toast('Expense added!','✅');$('receipt-prev-exp')&&($('receipt-prev-exp').style.display='none');await reload();setTab('expenses');}
+  else{toast(r?.error||'Error','❌');setBtnLoading('e-add',false);}
+}
+
+async function delExpense(id){if(!confirm('Delete?'))return;await api('DELETE',`/expenses/${id}`);toast('Deleted','🗑️');await reload();setTab('expenses');}
+
+// ─── FUEL ─────────────────────────────────────────────
+const US_STATES = ['AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY'];
+
+function pgFuel() {
+  const totalGal  = fuel.reduce((a,f) => a+(parseFloat(f.gallons)||0), 0);
+  const totalCost = fuel.reduce((a,f) => a+(parseFloat(f.total_cost)||0), 0);
+  const avgPPG    = totalGal > 0 ? totalCost/totalGal : 0;
+  return `
+  <div class="kpi-grid three">
+    <div class="kpi"><div class="kpi-lbl">Gallons</div><div class="kpi-val b" style="font-size:16px">${totalGal.toFixed(1)}</div></div>
+    <div class="kpi"><div class="kpi-lbl">Fuel Cost</div><div class="kpi-val r" style="font-size:16px">${$n(totalCost)}</div></div>
+    <div class="kpi"><div class="kpi-lbl">Avg/Gal</div><div class="kpi-val" style="font-size:16px">$${avgPPG.toFixed(2)}</div></div>
+  </div>
+  <div class="card">
+    <div class="card-body">
+      <div class="card-title">Log Fuel Stop</div>
+      <div class="form-row">
+        <div class="fg"><label>Date</label><input id="f-date" type="date" value="${today()}"></div>
+        <div class="fg"><label>State</label><select id="f-state">${US_STATES.map(s=>`<option>${s}</option>`).join('')}</select></div>
+      </div>
+      <div class="form-row">
+        <div class="fg"><label>Gallons</label><input id="f-gal" type="number" inputmode="decimal" placeholder="0.0" oninput="calcFuel()"></div>
+        <div class="fg"><label>Price/Gal ($)</label><input id="f-ppg" type="number" inputmode="decimal" placeholder="0.00" oninput="calcFuel()"></div>
+      </div>
+      <div class="form-row">
+        <div class="fg"><label>Total Cost ($)</label><input id="f-total" type="number" inputmode="decimal" placeholder="0.00"></div>
+        <div class="fg"><label>Odometer</label><input id="f-odo" type="number" inputmode="numeric" placeholder="optional"></div>
+      </div>
+      <div class="form-row full"><div class="fg"><label>Location (optional)</label><input id="f-loc" placeholder="Pilot TA #1234 – Amarillo, TX"></div></div>
+      <button id="f-add" class="btn btn-primary" data-label="+ Log Fuel" onclick="addFuel()">+ Log Fuel</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-body">
+      <div class="card-title">Fuel Log</div>
+      ${fuel.length===0 ? `<div class="empty"><div class="empty-ico">⛽</div><p>No fuel stops logged</p></div>` :
+        fuel.map(f => `
+        <div class="list-item">
+          <div class="li-icon" style="background:#fef3c7">⛽</div>
+          <div class="li-main">
+            <div class="li-title">${f.state} <span class="badge badge-yellow">${fd(f.date)}</span></div>
+            <div class="li-sub">${(f.gallons||0).toFixed(1)} gal · $${(f.price_per_gal||0).toFixed(2)}/gal${f.location?' · '+f.location:''}</div>
+          </div>
+          <div class="li-amount r">${$n(f.total_cost)}</div>
+          <button class="btn btn-danger btn-sm" onclick="delFuel('${f.id}')">✕</button>
+        </div>`).join('')}
+    </div>
+  </div>`;
+}
+
+function calcFuel() {
+  const g=parseFloat(v('f-gal'))||0, p=parseFloat(v('f-ppg'))||0;
+  const el=$('f-total'); if(el&&g&&p) el.value=(g*p).toFixed(2);
+}
+
+async function addFuel() {
+  const date=v('f-date'),state=v('f-state');
+  const gal=parseFloat(v('f-gal'))||0, ppg=parseFloat(v('f-ppg'))||0;
+  const total=parseFloat(v('f-total'))||(gal*ppg), odo=parseFloat(v('f-odo'))||0;
+  const loc=v('f-loc');
+  if(!date||!state){toast('Date and state required','⚠️');return;}
+  if(gal<=0&&total<=0){toast('Enter gallons or total cost','⚠️');return;}
+  setBtnLoading('f-add',true);
+  const r=await api('POST','/fuel',{date,state,gallons:gal,price_per_gal:ppg,total_cost:total,odometer:odo,location:loc});
+  if(r?.ok){toast('Fuel logged!','✅');await reload();setTab('fuel');}
+  else{toast(r?.error||'Error','❌');setBtnLoading('f-add',false);}
+}
+
+async function delFuel(id){if(!confirm('Delete?'))return;await api('DELETE',`/fuel/${id}`);toast('Deleted','🗑️');await reload();setTab('fuel');}
+
+// ─── FLEET (Owner) ────────────────────────────────────
+function pgFleet() {
+  return `
+  <div class="card">
+    <div class="card-body">
+      <div class="card-title">Add Truck</div>
+      <div class="form-row">
+        <div class="fg"><label>Unit #</label><input id="t-unit" placeholder="101"></div>
+        <div class="fg"><label>Year</label><input id="t-year" type="number" inputmode="numeric" placeholder="2022"></div>
+      </div>
+      <div class="form-row">
+        <div class="fg"><label>Make</label><input id="t-make" placeholder="Kenworth"></div>
+        <div class="fg"><label>Model</label><input id="t-model" placeholder="T680"></div>
+      </div>
+      <div class="form-row">
+        <div class="fg"><label>Plate</label><input id="t-plate" placeholder="ABC 1234"></div>
+        <div class="fg"><label>VIN (optional)</label><input id="t-vin" placeholder="1XKYD49X…"></div>
+      </div>
+      <button id="t-add" class="btn btn-primary" data-label="+ Add Truck" onclick="addTruck()">+ Add Truck</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-body">
+      <div class="card-title">Your Fleet (${trucks.length} trucks)</div>
+      ${trucks.length===0 ? `<div class="empty"><div class="empty-ico">🚛</div><p>No trucks yet</p></div>` :
+        trucks.map(t => `
+        <div class="list-item">
+          <div class="li-icon" style="background:var(--pl)">🚛</div>
+          <div class="li-main">
+            <div class="li-title">Unit ${t.unit_number} <span class="badge badge-green">${t.status}</span></div>
+            <div class="li-sub">${[t.year,t.make,t.model].filter(Boolean).join(' ')}${t.plate?' · '+t.plate:''}</div>
+          </div>
+          <button class="btn btn-danger btn-sm" onclick="delTruck('${t.id}')">✕</button>
+        </div>`).join('')}
+    </div>
+  </div>`;
+}
+
+async function addTruck() {
+  const unit=v('t-unit'),year=v('t-year'),make=v('t-make'),model=v('t-model'),plate=v('t-plate'),vin=v('t-vin');
+  if(!unit){toast('Unit # required','⚠️');return;}
+  setBtnLoading('t-add',true);
+  const r=await api('POST','/trucks',{unit_number:unit,year,make,model,plate,vin});
+  if(r?.ok){toast('Truck added!','✅');trucks=await api('GET','/trucks');setTab('fleet');}
+  else{toast(r?.error||'Error','❌');setBtnLoading('t-add',false);}
+}
+
+async function delTruck(id){if(!confirm('Remove truck?'))return;await api('DELETE',`/trucks/${id}`);toast('Removed','🗑️');trucks=await api('GET','/trucks');setTab('fleet');}
+
+// ─── DRIVERS (Owner) ──────────────────────────────────
+function pgDrivers() {
+  return `
+  <div class="card">
+    <div class="card-body">
+      <div class="card-title">Add Driver</div>
+      <div class="form-row full"><div class="fg"><label>Full Name</label><input id="d-name" placeholder="Alex Smith"></div></div>
+      <div class="form-row full"><div class="fg"><label>Email</label><input id="d-email" type="email" placeholder="driver@example.com" inputmode="email"></div></div>
+      <div class="form-row full"><div class="fg"><label>Password (optional — auto-generated if blank)</label><input id="d-pass" type="password" placeholder="Leave blank to auto-generate"></div></div>
+      <button id="d-add" class="btn btn-primary" data-label="+ Add Driver" onclick="addDriver()">+ Add Driver</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-body">
+      <div class="card-title">Your Drivers (${drivers.length})</div>
+      ${drivers.length===0 ? `<div class="empty"><div class="empty-ico">🚚</div><p>No drivers yet</p></div>` :
+        drivers.map(d => `
+        <div class="list-item">
+          <div class="li-icon" style="background:#f0fdf4">🚚</div>
+          <div class="li-main">
+            <div class="li-title">${d.name}</div>
+            <div class="li-sub">${d.email}</div>
+          </div>
+          <button class="btn btn-danger btn-sm" onclick="removeDriver('${d.id}')">Remove</button>
+        </div>`).join('')}
+    </div>
+  </div>`;
+}
+
+async function addDriver() {
+  const name=v('d-name'),email=v('d-email'),pass=v('d-pass');
+  if(!name||!email){toast('Name and email required','⚠️');return;}
+  setBtnLoading('d-add',true);
+  const r=await api('POST','/drivers',{name,email,password:pass||undefined});
+  if(r?.ok){
+    if(r.temp_password) toast(`Driver added! Temp password: ${r.temp_password}`,'✅');
+    else toast('Driver added!','✅');
+    drivers=await api('GET','/drivers');setTab('drivers');
+  } else{toast(r?.error||'Error','❌');setBtnLoading('d-add',false);}
+}
+
+async function removeDriver(id){if(!confirm('Remove driver from fleet?'))return;await api('DELETE',`/drivers/${id}`);toast('Removed','✅');drivers=await api('GET','/drivers');setTab('drivers');}
+
+// ─── SETTLEMENTS ──────────────────────────────────────
+const PAY_TYPES = [['per_mile','Per Mile'],['percent','% of Gross'],['flat','Flat Rate']];
+
+function pgSettlements() {
+  const isOwner = user?.role === 'owner';
+  if (!isOwner) {
+    return `
+    <div class="card">
+      <div class="card-body">
+        <div class="card-title">My Settlements</div>
+        ${settlements.length===0 ? `<div class="empty"><div class="empty-ico">💵</div><p>No settlements yet</p></div>` :
+          settlements.map(s => `
+          <div class="list-item">
+            <div class="li-icon" style="background:#f0fdf4">💵</div>
+            <div class="li-main">
+              <div class="li-title">${fd(s.period_start)} – ${fd(s.period_end)} ${statusBadge(s.status)}</div>
+              <div class="li-sub">Gross: ${$n(s.gross_pay)} · Deductions: ${$n(s.deductions)}</div>
+            </div>
+            <div class="li-amount g">${$n(s.net_pay)}</div>
+          </div>`).join('')}
+      </div>
+    </div>`;
+  }
+
+  return `
+  <div class="card">
+    <div class="card-body">
+      <div class="card-title">Generate Settlement</div>
+      <div class="form-row full"><div class="fg"><label>Driver</label>
+        <select id="s-driver"><option value="">— select driver —</option>${drivers.map(d=>`<option value="${d.id}">${d.name}</option>`).join('')}</select>
+      </div></div>
+      <div class="form-row">
+        <div class="fg"><label>Period Start</label><input id="s-start" type="date" value="${today().slice(0,8)}01"></div>
+        <div class="fg"><label>Period End</label><input id="s-end" type="date" value="${today()}"></div>
+      </div>
+      <div class="form-row">
+        <div class="fg"><label>Pay Type</label><select id="s-type">${PAY_TYPES.map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}</select></div>
+        <div class="fg"><label>Pay Rate ($)</label><input id="s-rate" type="number" inputmode="decimal" placeholder="0.00"></div>
+      </div>
+      <div class="form-row full"><div class="fg"><label>Deductions ($)</label><input id="s-ded" type="number" inputmode="decimal" placeholder="0.00"></div></div>
+      <div class="form-row full"><div class="fg"><label>Notes</label><textarea id="s-notes" placeholder="Insurance deduction, advance, etc."></textarea></div></div>
+      <button id="s-gen" class="btn btn-primary" data-label="Generate Settlement" onclick="genSettlement()">Generate Settlement</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-body">
+      <div class="card-title">Settlement History</div>
+      ${settlements.length===0 ? `<div class="empty"><div class="empty-ico">💵</div><p>No settlements yet</p></div>` :
+        settlements.map(s => `
+        <div class="list-item">
+          <div class="li-icon" style="background:#f0fdf4">💵</div>
+          <div class="li-main">
+            <div class="li-title">${s.driver_name} ${statusBadge(s.status)}</div>
+            <div class="li-sub">${fd(s.period_start)} – ${fd(s.period_end)} · Gross: ${$n(s.gross_pay)}</div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+            <div class="li-amount g">${$n(s.net_pay)}</div>
+            ${s.status==='draft'?`<button class="btn btn-green btn-sm" onclick="markPaid('${s.id}')">Mark Paid</button>`:''}
+          </div>
+        </div>`).join('')}
+    </div>
+  </div>`;
+}
+
+async function genSettlement() {
+  const driver_id=v('s-driver'),period_start=v('s-start'),period_end=v('s-end');
+  const pay_type=v('s-type'),pay_rate=parseFloat(v('s-rate'))||0,deductions=parseFloat(v('s-ded'))||0;
+  const notes=v('s-notes');
+  if(!driver_id||!period_start||!period_end){toast('Driver and dates required','⚠️');return;}
+  setBtnLoading('s-gen',true);
+  const r=await api('POST','/settlements',{driver_id,period_start,period_end,pay_type,pay_rate,deductions,notes});
+  if(r?.ok){toast(`Settlement: ${$n(r.net_pay)} net · ${$mi(r.total_miles)} driven`,'✅');settlements=await api('GET','/settlements');setTab('settlements');}
+  else{toast(r?.error||'Error','❌');setBtnLoading('s-gen',false);}
+}
+
+async function markPaid(id){
+  const r=await api('PATCH',`/settlements/${id}/status`,{status:'paid'});
+  if(r?.ok){toast('Marked as paid','✅');settlements=await api('GET','/settlements');setTab('settlements');}
+  else toast(r?.error||'Error','❌');
+}
+
+// ─── IFTA ─────────────────────────────────────────────
+function pgIFTA() {
+  const curQ = Math.ceil((new Date().getMonth()+1)/3);
+  const curY  = new Date().getFullYear();
+  return `
+  <div class="card">
+    <div class="card-body">
+      <div class="card-title">IFTA Fuel Report</div>
+      <div class="form-row">
+        <div class="fg"><label>Year</label><input id="ifta-year" type="number" value="${curY}" inputmode="numeric"></div>
+        <div class="fg"><label>Quarter</label><select id="ifta-qtr"><option value="1">Q1 (Jan–Mar)</option><option value="2"${curQ===2?' selected':''}>Q2 (Apr–Jun)</option><option value="3"${curQ===3?' selected':''}>Q3 (Jul–Sep)</option><option value="4"${curQ===4?' selected':''}>Q4 (Oct–Dec)</option></select></div>
+      </div>
+      <button class="btn btn-primary" onclick="loadIFTA()">Load Report</button>
+    </div>
+  </div>
+  <div id="ifta-results"></div>`;
+}
+
+async function loadIFTA() {
+  const year=v('ifta-year')||new Date().getFullYear(), qtr=v('ifta-qtr')||1;
+  const data = await api('GET',`/ifta?year=${year}&quarter=${qtr}`);
+  const rows = data?.fuel_by_state || [];
+  const p    = data?.period || {};
+  $('ifta-results').innerHTML = `
+  <div class="card">
+    <div class="card-body">
+      <div class="card-title">Q${qtr} ${year} — Fuel by State</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:12px">${p.start} to ${p.end}</div>
+      ${rows.length===0 ? `<div class="empty"><div class="empty-ico">⛽</div><p>No fuel data for this period</p></div>` :
+        `<table style="width:100%;border-collapse:collapse;font-size:14px">
+          <thead><tr style="border-bottom:2px solid var(--border)">
+            <th style="text-align:left;padding:8px 4px">State</th>
+            <th style="text-align:right;padding:8px 4px">Gallons</th>
+            <th style="text-align:right;padding:8px 4px">Cost</th>
+          </tr></thead>
+          <tbody>${rows.map(r=>`<tr style="border-bottom:1px solid var(--border)">
+            <td style="padding:8px 4px;font-weight:600">${r.state}</td>
+            <td style="padding:8px 4px;text-align:right">${parseFloat(r.gallons).toFixed(2)}</td>
+            <td style="padding:8px 4px;text-align:right;color:var(--r)">${$n(r.total_cost)}</td>
+          </tr>`).join('')}</tbody>
+          <tfoot><tr style="font-weight:800;border-top:2px solid var(--border)">
+            <td style="padding:8px 4px">TOTAL</td>
+            <td style="padding:8px 4px;text-align:right">${rows.reduce((a,r)=>a+(parseFloat(r.gallons)||0),0).toFixed(2)}</td>
+            <td style="padding:8px 4px;text-align:right;color:var(--r)">${$n(rows.reduce((a,r)=>a+(parseFloat(r.total_cost)||0),0))}</td>
+          </tr></tfoot>
+        </table>`}
+    </div>
+  </div>`;
+}
+
+// ─── MORE PAGE ────────────────────────────────────────
+function pgMore() {
+  const isOwner = user?.role === 'owner';
+  return `
+  <div class="card">
+    <div class="card-body">
+      <div class="card-title">Account</div>
+      <div class="list-item">
+        <div class="li-main"><div class="li-title">${user?.name}</div><div class="li-sub">${user?.email}</div></div>
+        <span class="badge badge-blue">${user?.plan||'free'}</span>
+      </div>
+    </div>
+  </div>
+  ${isOwner ? `
+  <div class="card">
+    <div class="card-body">
+      <div class="card-title">Owner Tools</div>
+      <button class="btn btn-outline" style="margin-bottom:10px" onclick="setTab('drivers')">🚚 Manage Drivers</button>
+      <button class="btn btn-outline" style="margin-bottom:10px" onclick="setTab('fleet')">🚛 Manage Fleet</button>
+      <button class="btn btn-outline" onclick="setTab('ifta')">📋 IFTA Report</button>
+    </div>
+  </div>` : `
+  <div class="card">
+    <div class="card-body">
+      <div class="card-title">Tools</div>
+      <button class="btn btn-outline" onclick="setTab('ifta')">📋 IFTA Report</button>
+    </div>
+  </div>`}
+  <div class="card">
+    <div class="card-body">
+      <button class="btn btn-danger" style="width:100%;margin:0" onclick="doLogout()">Sign Out</button>
+    </div>
+  </div>`;
+}
+
+// ─── RECEIPT SCANNING ────────────────────────────────
+let receiptCtx = null;
+function openReceipt(ctx) { receiptCtx = ctx; $('receipt-input').click(); }
+
+async function onReceiptFile(input) {
+  const file = input.files[0]; if (!file) return;
+  const prevEl = $('receipt-prev-exp'), imgEl = $('receipt-img-exp'), scanEl = $('receipt-scan-exp');
+  if (prevEl && imgEl) { imgEl.src = URL.createObjectURL(file); prevEl.style.display = 'block'; }
+  if (scanEl) scanEl.style.display = 'flex';
+  try {
+    const fd = new FormData();
+    fd.append('receipt', file);
+    const r = await fetch('/api/receipts/scan', {
+      method: 'POST',
+      headers: token ? { Authorization: 'Bearer ' + token } : {},
+      body: fd,
+    });
+    const data = await r.json();
+    if (!r.ok) { toast(data.error || 'Scan failed', '❌'); return; }
+    if (data.date)        { const el=$('e-date'); if(el) el.value=data.date; }
+    if (data.amount)      { const el=$('e-amt');  if(el) { el.value=data.amount.toFixed(2); calcDed(); } }
+    if (data.description) { const el=$('e-desc'); if(el) el.value=data.description; }
+    if (data.category) {
+      const sel=$('e-cat');
+      if(sel) for(let i=0;i<sel.options.length;i++) if(sel.options[i].value===data.category){sel.selectedIndex=i;break;}
+    }
+    toast('Receipt scanned! Review & save.','✅');
+  } catch { toast('Scan failed — enter manually','⚠️'); }
+  finally { if(scanEl) scanEl.style.display='none'; input.value=''; }
+}
+
+// ─── BOOT ─────────────────────────────────────────────
+if (token) {
+  boot();
+} else {
+  render();
+}
+</script>
+</body>
+</html>
