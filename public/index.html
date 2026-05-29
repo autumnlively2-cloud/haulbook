@@ -154,6 +154,7 @@ let user  = null;
 let tab   = 'dashboard';
 let authMode = 'login';
 let selectedRole = 'driver';
+let pendingToken = null;  // set during MFA step
 
 let summary  = null;
 let loads    = [];
@@ -223,8 +224,17 @@ async function doLogin() {
   if (!email || !pass) return toast('Fill in all fields','⚠️');
   $('auth-err').style.display='none';
   const r = await api('POST','/auth/login',{email,password:pass});
-  if (r?.token) { token = r.token; user = { name: r.name, role: r.role }; localStorage.setItem('hb_token', token); await boot(); }
-  else { $('auth-err').textContent = r?.error||'Login failed'; $('auth-err').style.display='block'; }
+  if (r?.token) {
+    token = r.token; user = { name: r.name, role: r.role };
+    localStorage.setItem('hb_token', token); await boot();
+  } else if (r?.pending_mfa) {
+    pendingToken = r.pending_token;
+    authMode = 'otp';
+    $('root').innerHTML = renderOTP(r.hint || 'Check your email or phone');
+  } else {
+    $('auth-err').textContent = r?.error||'Login failed';
+    $('auth-err').style.display='block';
+  }
 }
 
 async function doSignup() {
@@ -237,7 +247,49 @@ async function doSignup() {
   else { $('auth-err').textContent = r?.error||'Signup failed'; $('auth-err').style.display='block'; }
 }
 
-function doLogout() { token = null; user = null; localStorage.removeItem('hb_token'); summary=null; loads=[]; expenses=[]; fuel=[]; render(); }
+async function doVerifyOTP() {
+  const otp = v('otp-code');
+  if (otp.length !== 6) return toast('Enter the 6-digit code','⚠️');
+  const errEl = $('otp-err');
+  errEl.style.display='none';
+  const r = await api('POST','/auth/verify-otp',{pending_token:pendingToken,otp});
+  if (r?.token) {
+    token = r.token; user = { name: r.name, role: r.role };
+    localStorage.setItem('hb_token', token); pendingToken = null; await boot();
+  } else {
+    errEl.textContent = r?.error || 'Invalid code'; errEl.style.display='block';
+  }
+}
+
+async function doResendOTP() {
+  const r = await api('POST','/auth/resend-otp',{pending_token:pendingToken});
+  if (r?.ok) toast('New code sent!','✅');
+  else toast(r?.error||'Failed to resend','❌');
+}
+
+function renderOTP(hint) {
+  return `<div class="auth-wrap">
+    <div class="auth-box">
+      <div class="auth-logo"><span class="truck-ico">🔐</span><h1>HaulBook</h1></div>
+      <h2>Verify your identity</h2>
+      <p class="sub">${hint}</p>
+      <div id="otp-err" class="err-msg" style="display:none"></div>
+      <div class="field">
+        <label>6-digit code</label>
+        <input id="otp-code" type="text" inputmode="numeric" maxlength="6" placeholder="000000"
+          style="font-size:28px;letter-spacing:8px;text-align:center;font-weight:700"
+          onkeydown="if(event.key==='Enter')doVerifyOTP()">
+      </div>
+      <button class="btn btn-primary" onclick="doVerifyOTP()">Verify</button>
+      <div class="auth-switch" style="margin-top:12px">
+        <span onclick="doResendOTP()">Resend code</span> &nbsp;·&nbsp;
+        <span onclick="authMode='login';pendingToken=null;render()">Back to sign in</span>
+      </div>
+    </div>
+  </div>`;
+}
+
+function doLogout() { token = null; user = null; localStorage.removeItem('hb_token'); summary=null; loads=[]; expenses=[]; fuel=[]; pendingToken=null; authMode='login'; render(); }
 
 async function boot() {
   const me = await api('GET','/auth/me');
@@ -294,6 +346,7 @@ function renderPage() {
 
 // ─── AUTH SCREEN ──────────────────────────────────────
 function renderAuth() {
+  if (authMode === 'otp') return renderOTP('Check your email or phone for the code');
   const isLogin = authMode === 'login';
   return `<div class="auth-wrap">
     <div class="auth-box">
@@ -828,75 +881,400 @@ async function loadIFTA() {
 // ─── MORE PAGE ────────────────────────────────────────
 function pgMore() {
   const isOwner = user?.role === 'owner';
+  const plan    = user?.plan || 'free';
+  const isPaid  = plan === 'pro' || plan === 'business';
   return `
   <div class="card">
     <div class="card-body">
       <div class="card-title">Account</div>
       <div class="list-item">
         <div class="li-main"><div class="li-title">${user?.name}</div><div class="li-sub">${user?.email}</div></div>
-        <span class="badge badge-blue">${user?.plan||'free'}</span>
+        <span class="badge ${isPaid?'badge-green':'badge-blue'}">${plan.toUpperCase()}</span>
+      </div>
+      ${isPaid ? `<button class="btn btn-outline" style="margin-top:10px" onclick="openPortal()">Manage Subscription</button>` : ''}
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-body">
+      <div class="card-title">🔐 Login Security (2FA)</div>
+      <div class="form-row">
+        <div class="fg"><label>Method</label>
+          <select id="mfa-method" onchange="togglePhoneField()">
+            <option value="none"${(user?.mfa_method||'none')==='none'?' selected':''}>Off — no 2FA</option>
+              <option value="email"${(user?.mfa_method||'none')==='email'?' selected':''}>Email code</option>
+              <option value="sms"${(user?.mfa_method||'none')==='sms'?' selected':''}>SMS text code</option>
+              <option value="both"${(user?.mfa_method||'none')==='both'?' selected':''}>Both email & SMS</option>
+            </select>
+          </div>
+        </div>
+        <div id="mfa-phone-row" style="display:${(user?.mfa_method==='sms'||user?.mfa_method==='both')?'block':'none'}">
+          <div class="fg"><label>Phone Number</label>
+            <input id="mfa-phone" type="tel" placeholder="+15555551234" value="${user?.phone||''}">
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="saveMFA()">Save Security Settings</button>
       </div>
     </div>
   </div>
-  ${isOwner ? `
+  ${!isPaid ? `
   <div class="card">
     <div class="card-body">
-      <div class="card-title">Owner Tools</div>
-      <button class="btn btn-outline" style="margin-bottom:10px" onclick="setTab('drivers')">🚚 Manage Drivers</button>
-      <button class="btn btn-outline" style="margin-bottom:10px" onclick="setTab('fleet')">🚛 Manage Fleet</button>
-      <button class="btn btn-outline" onclick="setTab('ifta')">📋 IFTA Report</button>
+      <div class="card-title">Upgrade Your Plan</div>
+      <div style="display:grid;gap:12px;margin-top:8px">
+        <div style="border:2px solid var(--border);border-radius:12px;padding:16px">
+          <div style="font-weight:700;font-size:16px">Pro — $14.99/mo</div>
+          <div style="color:var(--sub);font-size:13px;margin:6px 0 12px">Fleet management, settlements, IFTA reports</div>
+          <button class="btn btn-primary" onclick="openCheckout('pro')">Upgrade to Pro</button>
+        </div>
+        <div style="border:2px solid var(--p);border-radius:12px;padding:16px">
+          <div style="font-weight:700;font-size:16px">Business — $29.99/mo</div>
+          <div style="color:var(--sub);font-size:13px;margin:6px 0 12px">Everything in Pro + unlimited drivers & trucks</div>
+          <button class="btn btn-primary" onclick="openCheckout('business')">Upgrade to Business</button>
+        </div>
+      </div>
     </div>
-  </div>` : `
+  </div>` : ''}
   <div class="card">
     <div class="card-body">
-      <div class="card-title">Tools</div>
-      <button class="btn btn-outline" onclick="setTab('ifta')">📋 IFTA Report</button>
-    </div>
-  </div>`}
-  <div class="card">
-    <div class="card-body">
-      <button class="btn btn-danger" style="width:100%;margin:0" onclick="doLogout()">Sign Out</button>
+      <button class="btn btn-outline" style="width:100%;color:var(--r);border-color:var(--r)" onclick="doLogout()">Sign Out</button>
     </div>
   </div>`;
 }
 
-// ─── RECEIPT SCANNING ────────────────────────────────
-let receiptCtx = null;
-function openReceipt(ctx) { receiptCtx = ctx; $('receipt-input').click(); }
-
-async function onReceiptFile(input) {
-  const file = input.files[0]; if (!file) return;
-  const prevEl = $('receipt-prev-exp'), imgEl = $('receipt-img-exp'), scanEl = $('receipt-scan-exp');
-  if (prevEl && imgEl) { imgEl.src = URL.createObjectURL(file); prevEl.style.display = 'block'; }
-  if (scanEl) scanEl.style.display = 'flex';
+async function openPortal() {
   try {
-    const fd = new FormData();
-    fd.append('receipt', file);
-    const r = await fetch('/api/receipts/scan', {
+    const r = await api('POST', '/billing/portal', {});
+    if (r.url) window.location.href = r.url;
+  } catch(e) { alert('Could not open billing portal'); }
+}
+
+async function openCheckout(plan) {
+  try {
+    const r = await api('POST', '/billing/checkout', { plan });
+    if (r.url) window.location.href = r.url;
+  } catch(e) { alert('Could not start checkout'); }
+}
+
+function togglePhoneField() {
+  const m = document.getElementById('mfa-method')?.value;
+  const row = document.getElementById('mfa-phone-row');
+  if (row) row.style.display = (m === 'sms' || m === 'both') ? 'block' : 'none';
+}
+
+async function saveMFA() {
+  const method = document.getElementById('mfa-method')?.value || 'none';
+  const phone  = document.getElementById('mfa-phone')?.value || '';
+  if ((method === 'sms' || method === 'both') && !phone) {
+    return alert('Please enter a phone number for SMS codes.');
+  }
+  try {
+    const r = await api('PUT', '/auth/mfa', { mfa_method: method, phone });
+    if (r.ok) {
+      user.mfa_method = method;
+      user.phone = phone;
+      alert('Security settings saved!');
+    }
+  } catch(e) { alert('Error saving settings'); }
+}
+
+// ─── LOAD/EXPENSE/FUEL FORMS ───────────────────────────
+let editId = null;
+function openLoadForm(row) {
+  editId = row?.id || null;
+  const t = row?.truck_id || '';
+  const truckOpts = (trucks||[]).map(tr => `<option value="${tr.id}"${tr.id===t?' selected':''}>${tr.unit_number}</option>`).join('');
+  showModal(`
+    <div class="modal-title">${editId?'Edit':'Add'} Load</div>
+    <div class="fg"><label>Date</label><input id="f-date" type="date" value="${row?.date||today()}"></div>
+    <div class="fg"><label>Truck</label><select id="f-truck"><option value="">— none —</option>${truckOpts}</select></div>
+    <div class="fg"><label>Origin</label><input id="f-orig" placeholder="City, ST" value="${row?.origin||''}"></div>
+    <div class="fg"><label>Destination</label><input id="f-dest" placeholder="City, ST" value="${row?.destination||''}"></div>
+    <div class="form-row">
+      <div class="fg"><label>Miles</label><input id="f-miles" type="number" inputmode="numeric" placeholder="0" value="${row?.miles||''}"></div>
+      <div class="fg"><label>Rate/mi</label><input id="f-rate" type="number" inputmode="decimal" step="0.01" placeholder="0.00" value="${row?.rate_per_mile||''}"></div>
+    </div>
+    <div class="fg"><label>Gross Override ($)</label><input id="f-gross" type="number" inputmode="decimal" step="0.01" placeholder="auto" value="${row?.gross||''}"></div>
+    <div class="fg"><label>Notes</label><input id="f-notes" placeholder="Optional" value="${row?.notes||''}"></div>
+    <button class="btn btn-primary" onclick="saveLoad()">Save</button>
+    ${editId?`<button class="btn btn-outline" style="margin-top:8px;color:var(--r);border-color:var(--r)" onclick="deleteLoad('${editId}')">Delete</button>`:''}
+  `);
+}
+
+async function saveLoad() {
+  const miles = parseFloat(document.getElementById('f-miles')?.value)||0;
+  const rate  = parseFloat(document.getElementById('f-rate')?.value)||0;
+  const grossOverride = parseFloat(document.getElementById('f-gross')?.value)||0;
+  const body = {
+    date:         document.getElementById('f-date')?.value,
+    truck_id:     document.getElementById('f-truck')?.value||null,
+    origin:       document.getElementById('f-orig')?.value,
+    destination:  document.getElementById('f-dest')?.value,
+    miles, rate_per_mile: rate,
+    gross: grossOverride || (miles * rate),
+    notes: document.getElementById('f-notes')?.value,
+    status: 'delivered',
+  };
+  await api(editId?'PUT':'POST', editId?`/loads/${editId}`:'/loads', body);
+  closeModal(); await refreshLoads(); render();
+}
+
+async function deleteLoad(id) {
+  if (!confirm('Delete this load?')) return;
+  await api('DELETE', `/loads/${id}`);
+  closeModal(); await refreshLoads(); render();
+}
+
+function openExpForm(row) {
+  editId = row?.id || null;
+  const cats = ['Fuel','Maintenance','Tires','Insurance','Permits','Tolls','Meals','Lodging','Phone','Equipment','Lumper Fees','Parking','Other'];
+  const catOpts = cats.map(c=>`<option${(row?.category||'Other')===c?' selected':''}>${c}</option>`).join('');
+  showModal(`
+    <div class="modal-title">${editId?'Edit':'Add'} Expense</div>
+    <div id="receipt-preview" class="receipt-preview"><div class="receipt-scanning" id="scan-overlay">🔍 Scanning receipt…</div><img id="receipt-img" style="width:100%;display:block"></div>
+    <button class="btn btn-outline" style="margin-bottom:12px" onclick="document.getElementById('receipt-input').click()">📷 Scan Receipt</button>
+    <div class="fg"><label>Date</label><input id="f-date" type="date" value="${row?.date||today()}"></div>
+    <div class="fg"><label>Category</label><select id="f-cat">${catOpts}</select></div>
+    <div class="fg"><label>Description</label><input id="f-desc" placeholder="Optional" value="${row?.description||''}"></div>
+    <div class="form-row">
+      <div class="fg"><label>Amount ($)</label><input id="f-amt" type="number" inputmode="decimal" step="0.01" placeholder="0.00" value="${row?.amount||''}"></div>
+      <div class="fg"><label>Business %</label><input id="f-pct" type="number" inputmode="numeric" value="${row?.business_pct||100}"></div>
+    </div>
+    <button class="btn btn-primary" onclick="saveExp()">Save</button>
+    ${editId?`<button class="btn btn-outline" style="margin-top:8px;color:var(--r);border-color:var(--r)" onclick="deleteExp('${editId}')">Delete</button>`:''}
+  `);
+}
+
+async function saveExp() {
+  const body = {
+    date:        document.getElementById('f-date')?.value,
+    category:    document.getElementById('f-cat')?.value,
+    description: document.getElementById('f-desc')?.value,
+    amount:      parseFloat(document.getElementById('f-amt')?.value)||0,
+    business_pct:parseFloat(document.getElementById('f-pct')?.value)||100,
+  };
+  await api(editId?'PUT':'POST', editId?`/expenses/${editId}`:'/expenses', body);
+  closeModal(); await refreshExpenses(); render();
+}
+
+async function deleteExp(id) {
+  if (!confirm('Delete this expense?')) return;
+  await api('DELETE', `/expenses/${id}`);
+  closeModal(); await refreshExpenses(); render();
+}
+
+function openFuelForm(row) {
+  editId = row?.id || null;
+  const states = ['AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY'];
+  const stOpts = states.map(s=>`<option${(row?.state||'')===s?' selected':''}>${s}</option>`).join('');
+  const truckOpts = (trucks||[]).map(tr=>`<option value="${tr.id}"${tr.id===(row?.truck_id||'')?' selected':''}>${tr.unit_number}</option>`).join('');
+  showModal(`
+    <div class="modal-title">${editId?'Edit':'Add'} Fuel Stop</div>
+    <div class="fg"><label>Date</label><input id="f-date" type="date" value="${row?.date||today()}"></div>
+    <div class="fg"><label>State</label><select id="f-state"><option value="">—</option>${stOpts}</select></div>
+    <div class="fg"><label>Truck</label><select id="f-truck"><option value="">— none —</option>${truckOpts}</select></div>
+    <div class="form-row">
+      <div class="fg"><label>Gallons</label><input id="f-gal" type="number" inputmode="decimal" step="0.001" placeholder="0.000" value="${row?.gallons||''}"></div>
+      <div class="fg"><label>Price/gal</label><input id="f-ppg" type="number" inputmode="decimal" step="0.001" placeholder="0.000" value="${row?.price_per_gal||''}"></div>
+    </div>
+    <div class="fg"><label>Odometer</label><input id="f-odo" type="number" inputmode="numeric" placeholder="0" value="${row?.odometer||''}"></div>
+    <div class="fg"><label>Location</label><input id="f-loc" placeholder="Truck stop name" value="${row?.location||''}"></div>
+    <button class="btn btn-primary" onclick="saveFuel()">Save</button>
+    ${editId?`<button class="btn btn-outline" style="margin-top:8px;color:var(--r);border-color:var(--r)" onclick="deleteFuel('${editId}')">Delete</button>`:''}
+  `);
+}
+
+async function saveFuel() {
+  const body = {
+    date:         document.getElementById('f-date')?.value,
+    state:        document.getElementById('f-state')?.value,
+    truck_id:     document.getElementById('f-truck')?.value||null,
+    gallons:      parseFloat(document.getElementById('f-gal')?.value)||0,
+    price_per_gal:parseFloat(document.getElementById('f-ppg')?.value)||0,
+    odometer:     parseFloat(document.getElementById('f-odo')?.value)||0,
+    location:     document.getElementById('f-loc')?.value,
+  };
+  await api(editId?'PUT':'POST', editId?`/fuel/${editId}`:'/fuel', body);
+  closeModal(); await refreshFuel(); render();
+}
+
+async function deleteFuel(id) {
+  if (!confirm('Delete this fuel entry?')) return;
+  await api('DELETE', `/fuel/${id}`);
+  closeModal(); await refreshFuel(); render();
+}
+
+function openTruckForm(row) {
+  editId = row?.id || null;
+  showModal(`
+    <div class="modal-title">${editId?'Edit':'Add'} Truck</div>
+    <div class="fg"><label>Unit #</label><input id="f-unit" placeholder="T-101" value="${row?.unit_number||''}"></div>
+    <div class="form-row">
+      <div class="fg"><label>Year</label><input id="f-year" type="number" inputmode="numeric" placeholder="${new Date().getFullYear()}" value="${row?.year||''}"></div>
+      <div class="fg"><label>Make</label><input id="f-make" placeholder="Freightliner" value="${row?.make||''}"></div>
+    </div>
+    <div class="fg"><label>Model</label><input id="f-model" placeholder="Cascadia" value="${row?.model||''}"></div>
+    <div class="fg"><label>VIN</label><input id="f-vin" placeholder="Optional" value="${row?.vin||''}"></div>
+    <div class="fg"><label>Plate</label><input id="f-plate" placeholder="Optional" value="${row?.plate||''}"></div>
+    <button class="btn btn-primary" onclick="saveTruck()">Save</button>
+    ${editId?`<button class="btn btn-outline" style="margin-top:8px;color:var(--r);border-color:var(--r)" onclick="deleteTruck('${editId}')">Delete</button>`:''}
+  `);
+}
+
+async function saveTruck() {
+  const body = {
+    unit_number: document.getElementById('f-unit')?.value,
+    year:  document.getElementById('f-year')?.value,
+    make:  document.getElementById('f-make')?.value,
+    model: document.getElementById('f-model')?.value,
+    vin:   document.getElementById('f-vin')?.value,
+    plate: document.getElementById('f-plate')?.value,
+  };
+  await api(editId?'PUT':'POST', editId?`/trucks/${editId}`:'/trucks', body);
+  closeModal(); await refreshTrucks(); render();
+}
+
+async function deleteTruck(id) {
+  if (!confirm('Delete this truck?')) return;
+  await api('DELETE', `/trucks/${id}`);
+  closeModal(); await refreshTrucks(); render();
+}
+
+function openDriverForm(row) {
+  editId = row?.id || null;
+  showModal(`
+    <div class="modal-title">${editId?'Edit':'Invite'} Driver</div>
+    ${!editId ? `
+    <div class="fg"><label>Email</label><input id="f-email" type="email" placeholder="driver@email.com"></div>
+    <div class="fg"><label>Name</label><input id="f-name" placeholder="Full name"></div>
+    <p style="font-size:12px;color:var(--sub)">A temporary password will be sent to the driver's email.</p>
+    ` : `<div class="fg"><label>Name</label><input id="f-name" value="${row?.name||''}"></div>`}
+    <button class="btn btn-primary" onclick="saveDriver()">Save</button>
+    ${editId?`<button class="btn btn-outline" style="margin-top:8px;color:var(--r);border-color:var(--r)" onclick="removeDriver('${editId}')">Remove Driver</button>`:''}
+  `);
+}
+
+async function saveDriver() {
+  if (!editId) {
+    const body = { email: document.getElementById('f-email')?.value, name: document.getElementById('f-name')?.value };
+    await api('POST', '/drivers', body);
+  } else {
+    await api('PUT', `/drivers/${editId}`, { name: document.getElementById('f-name')?.value });
+  }
+  closeModal(); await refreshDrivers(); render();
+}
+
+async function removeDriver(id) {
+  if (!confirm('Remove this driver from your fleet?')) return;
+  await api('DELETE', `/drivers/${id}`);
+  closeModal(); await refreshDrivers(); render();
+}
+
+function openSettForm(row) {
+  editId = row?.id || null;
+  const driverOpts = (drivers||[]).map(d=>`<option value="${d.id}"${d.id===(row?.driver_id||'')?' selected':''}>${d.name}</option>`).join('');
+  const payTypes = ['per_mile','percent','flat'];
+  const ptOpts = payTypes.map(t=>`<option${(row?.pay_type||'per_mile')===t?' selected':''}>${t}</option>`).join('');
+  showModal(`
+    <div class="modal-title">${editId?'Edit':'New'} Settlement</div>
+    <div class="fg"><label>Driver</label><select id="f-driver">${driverOpts}</select></div>
+    <div class="form-row">
+      <div class="fg"><label>Period Start</label><input id="f-start" type="date" value="${row?.period_start||today()}"></div>
+      <div class="fg"><label>Period End</label><input id="f-end" type="date" value="${row?.period_end||today()}"></div>
+    </div>
+    <div class="form-row">
+      <div class="fg"><label>Pay Type</label><select id="f-ptype">${ptOpts}</select></div>
+      <div class="fg"><label>Rate</label><input id="f-prate" type="number" inputmode="decimal" step="0.01" placeholder="0" value="${row?.pay_rate||''}"></div>
+    </div>
+    <div class="fg"><label>Deductions ($)</label><input id="f-ded" type="number" inputmode="decimal" step="0.01" placeholder="0" value="${row?.deductions||'0'}"></div>
+    <div class="fg"><label>Notes</label><input id="f-notes" placeholder="Optional" value="${row?.notes||''}"></div>
+    <button class="btn btn-primary" onclick="saveSett()">Calculate & Save</button>
+    ${editId?`<button class="btn btn-outline" style="margin-top:8px;color:var(--r);border-color:var(--r)" onclick="deleteSett('${editId}')">Delete</button>`:''}
+  `);
+}
+
+async function saveSett() {
+  const body = {
+    driver_id:    document.getElementById('f-driver')?.value,
+    period_start: document.getElementById('f-start')?.value,
+    period_end:   document.getElementById('f-end')?.value,
+    pay_type:     document.getElementById('f-ptype')?.value,
+    pay_rate:     parseFloat(document.getElementById('f-prate')?.value)||0,
+    deductions:   parseFloat(document.getElementById('f-ded')?.value)||0,
+    notes:        document.getElementById('f-notes')?.value,
+  };
+  await api(editId?'PUT':'POST', editId?`/settlements/${editId}`:'/settlements', body);
+  closeModal(); await refreshSettlements(); render();
+}
+
+async function deleteSett(id) {
+  if (!confirm('Delete this settlement?')) return;
+  await api('DELETE', `/settlements/${id}`);
+  closeModal(); await refreshSettlements(); render();
+}
+
+// ─── RECEIPT SCANNING ─────────────────────────────────
+async function onReceiptFile(input) {
+  if (!input.files[0]) return;
+  const prev = document.getElementById('receipt-preview');
+  const img  = document.getElementById('receipt-img');
+  const overlay = document.getElementById('scan-overlay');
+  if (prev) prev.style.display = 'block';
+  if (overlay) overlay.style.display = 'flex';
+  if (img) img.src = URL.createObjectURL(input.files[0]);
+  const fd = new FormData();
+  fd.append('receipt', input.files[0]);
+  try {
+    const r = await fetch(BASE + '/receipts/scan', {
       method: 'POST',
-      headers: token ? { Authorization: 'Bearer ' + token } : {},
-      body: fd,
+      headers: { 'Authorization': 'Bearer ' + token },
+      body: fd
     });
     const data = await r.json();
-    if (!r.ok) { toast(data.error || 'Scan failed', '❌'); return; }
-    if (data.date)        { const el=$('e-date'); if(el) el.value=data.date; }
-    if (data.amount)      { const el=$('e-amt');  if(el) { el.value=data.amount.toFixed(2); calcDed(); } }
-    if (data.description) { const el=$('e-desc'); if(el) el.value=data.description; }
-    if (data.category) {
-      const sel=$('e-cat');
-      if(sel) for(let i=0;i<sel.options.length;i++) if(sel.options[i].value===data.category){sel.selectedIndex=i;break;}
-    }
-    toast('Receipt scanned! Review & save.','✅');
-  } catch { toast('Scan failed — enter manually','⚠️'); }
-  finally { if(scanEl) scanEl.style.display='none'; input.value=''; }
+    if (data.date)        { const d = document.getElementById('f-date');  if(d) d.value = data.date; }
+    if (data.amount)      { const a = document.getElementById('f-amt');   if(a) a.value = data.amount; }
+    if (data.description) { const s = document.getElementById('f-desc'); if(s) s.value = data.description; }
+    if (data.category)    { const c = document.getElementById('f-cat');  if(c) c.value = data.category; }
+  } catch(e) { console.error('Scan failed', e); }
+  finally { if (overlay) overlay.style.display = 'none'; }
 }
 
-// ─── BOOT ─────────────────────────────────────────────
-if (token) {
-  boot();
-} else {
-  render();
+// ─── MODAL ────────────────────────────────────────────
+function showModal(html) {
+  const bg = document.getElementById('modal-bg');
+  const box = document.getElementById('modal-box');
+  if (!bg || !box) return;
+  box.innerHTML = html;
+  bg.style.display = 'flex';
+  setTimeout(() => bg.classList.add('open'), 10);
 }
+function closeModal() {
+  const bg = document.getElementById('modal-bg');
+  if (!bg) return;
+  bg.classList.remove('open');
+  setTimeout(() => { bg.style.display = 'none'; }, 200);
+}
+
+// ─── HELPERS ──────────────────────────────────────────
+function today() {
+  return new Date().toISOString().split('T')[0];
+}
+function $n(v) {
+  return '$' + (parseFloat(v)||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+function $mi(v) {
+  return (parseFloat(v)||0).toLocaleString('en-US',{minimumFractionDigits:1,maximumFractionDigits:1}) + ' mi';
+}
+
+
+// ─── REFRESH HELPERS ──────────────────────────────────
+async function refreshLoads()       { loads       = await api('GET','/loads');       }
+async function refreshExpenses()    { expenses    = await api('GET','/expenses');    }
+async function refreshFuel()        { fuel        = await api('GET','/fuel');        }
+async function refreshTrucks()      { trucks      = await api('GET','/trucks');      }
+async function refreshDrivers()     { drivers     = await api('GET','/drivers');     }
+async function refreshSettlements() { settlements = await api('GET','/settlements'); }
+
+boot();
 </script>
 </body>
 </html>

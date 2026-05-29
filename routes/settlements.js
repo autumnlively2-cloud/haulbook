@@ -1,5 +1,5 @@
 const express = require('express');
-const { auth, requireOwner } = require('../middleware/auth');
+const { auth, requireOwner, requirePlan } = require('../middleware/auth');
 const { getSettlements, getSettlementsByDriver, createSettlement, updateSettlementStatus,
         getLoads, uid } = require('../db');
 
@@ -7,7 +7,7 @@ const router = express.Router();
 
 // Owner: get all settlements for their drivers
 // Driver: get their own settlements
-router.get('/', auth, async (req, res) => {
+router.get('/', auth, requirePlan('pro'), async (req, res) => {
   try {
     const limit  = parseInt(req.query.limit)  || 200;
     const offset = parseInt(req.query.offset) || 0;
@@ -19,7 +19,7 @@ router.get('/', auth, async (req, res) => {
 });
 
 // Owner: generate / create a settlement
-router.post('/', auth, requireOwner, async (req, res) => {
+router.post('/', auth, requireOwner, requirePlan('pro'), async (req, res) => {
   try {
     const { driver_id, period_start, period_end, pay_rate, pay_type, deductions, notes } = req.body;
     if (!driver_id || !period_start || !period_end)

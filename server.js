@@ -14,12 +14,12 @@ app.use('/api/billing/webhook', express.raw({ type: 'application/json' }));
 
 const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
-  : [`http://localhost:${PORT}`];
+  : ['http://localhost:' + PORT];
 
 app.use(cors({
   origin: (origin, cb) => {
     if (!origin || ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
-    cb(new Error(`CORS: ${origin} not allowed`));
+    cb(new Error('CORS: ' + origin + ' not allowed'));
   },
   credentials: true,
 }));
@@ -36,10 +36,11 @@ app.use('/api/drivers',     require('./routes/drivers'));
 app.use('/api/settlements', require('./routes/settlements'));
 app.use('/api/ifta',        require('./routes/ifta'));
 app.use('/api/receipts',    require('./routes/receipts'));
+app.use('/api/billing',     require('./routes/billing'));
 
 // Dashboard summary
 const { auth } = require('./middleware/auth');
-const { getUser, getDashboardTotals, getMonthlyLoads, getDriversByOwner, getTrucks, getLoads } = require('./db');
+const { getUser, getDashboardTotals, getMonthlyLoads, getDriversByOwner, getTrucks } = require('./db');
 
 app.get('/api/summary', auth, async (req, res) => {
   try {
@@ -73,8 +74,11 @@ app.get('/api/summary', auth, async (req, res) => {
       quarterly: (seTax + fedTax + stateTax) / 4,
       monthly,
       owner: ownerData,
-      user: { id: user.id, name: user.name, email: user.email, role: user.role,
-              plan: user.plan, state: user.state, state_tax_rate: user.state_tax_rate },
+      user: {
+        id: user.id, name: user.name, email: user.email,
+        role: user.role, plan: user.plan,
+        state: user.state, state_tax_rate: user.state_tax_rate,
+      },
     });
   } catch (err) {
     console.error('Summary error:', err);
@@ -89,9 +93,12 @@ app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.ht
 const { initDb } = require('./db');
 initDb()
   .then(() => app.listen(PORT, () => {
-    console.log(`\n🚛 HaulBook running on http://localhost:${PORT}`);
-    console.log(`   Stripe: ${process.env.STRIPE_SECRET_KEY?.startsWith('sk_') ? '✓' : '✗'}`);
-    console.log(`   AI Scan: ${process.env.ANTHROPIC_API_KEY ? '✓' : '✗'}`);
-    console.log(`   DB: ${process.env.DATABASE_URL ? '✓ PostgreSQL' : '✗ DATABASE_URL missing'}\n`);
+    console.log('HaulBook running on http://localhost:' + PORT);
+    console.log('   Stripe: ' + (process.env.STRIPE_SECRET_KEY && process.env.STRIPE_SECRET_KEY.startsWith('sk_') ? 'configured' : 'not configured'));
+    console.log('   AI Scan: ' + (process.env.ANTHROPIC_API_KEY ? 'configured' : 'not configured'));
+    console.log('   DB: ' + (process.env.DATABASE_URL ? 'PostgreSQL connected' : 'DATABASE_URL missing'));
   }))
-  .catch(err => { console.error('DB init failed:', err.message); process.exit(1); });
+  .catch(err => {
+    console.error('DB init failed:', err.message);
+    process.exit(1);
+  });

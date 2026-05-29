@@ -1,19 +1,19 @@
 const express = require('express');
 const bcrypt  = require('bcryptjs');
-const { auth, requireOwner } = require('../middleware/auth');
+const { auth, requireOwner, requirePlan } = require('../middleware/auth');
 const { getDriversByOwner, createUser, getUserByEmail, uid } = require('../db');
 
 const router = express.Router();
 
 // Owner: list all their drivers
-router.get('/', auth, requireOwner, async (req, res) => {
+router.get('/', auth, requireOwner, requirePlan('pro'), async (req, res) => {
   try {
     res.json(await getDriversByOwner(req.userId));
   } catch { res.status(500).json({ error: 'Server error' }); }
 });
 
 // Owner: add/invite a driver (creates account if email not found)
-router.post('/', auth, requireOwner, async (req, res) => {
+router.post('/', auth, requireOwner, requirePlan('pro'), async (req, res) => {
   try {
     const { name, email, password } = req.body;
     if (!name?.trim() || !email) return res.status(400).json({ error: 'name and email required' });
@@ -35,7 +35,7 @@ router.post('/', auth, requireOwner, async (req, res) => {
 });
 
 // Owner: remove driver from fleet (doesn't delete account)
-router.delete('/:id', auth, requireOwner, async (req, res) => {
+router.delete('/:id', auth, requireOwner, requirePlan('pro'), async (req, res) => {
   try {
     const { pool } = require('../db');
     await pool.query('UPDATE users SET owner_id=NULL WHERE id=$1 AND owner_id=$2', [req.params.id, req.userId]);
